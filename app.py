@@ -7,7 +7,6 @@ import matplotlib.cm
 import mediapipe as mp
 import numpy as np
 import os
-import pygltflib
 import shutil
 import struct
 import tempfile
@@ -188,6 +187,7 @@ class face_image_to_face_mesh:
         for quad in QUADS:
             quadIndex = 1 + quadIndex
             if True:
+                # is this is breaking babylonjs and hence gradio's 3D component?
                 lines.append( "f " + " ".join([f'{vertex}/{vertex}/{quadIndex}' for vertex in quad]) )
             else:
                 lines.append( "f " + " ".join([str(vertex) for vertex in quad]) )
