@@ -14,7 +14,6 @@ import pygltflib
 import struct
 import tempfile
 
-# ok... I goofed one of them :-(
 QUADS = [
 	[300, 334, 333, 298] , [  1,  12, 303, 268] , [234, 233, 122, 129] , [270, 304, 305, 271] , [246, 129, 115, 189] ,
 	[112, 118, 229,  32] , [104,  55,  69, 105] , [228,  35, 128, 235] , [120, 102, 101, 121] , [ 74,  73,  38,  40] ,
@@ -35,7 +34,6 @@ QUADS = [
 	[ 12,  73,  39,  13] , [208, 217, 207, 206] , [238, 221, 116, 219] , [ 46, 221, 238,  45] , [184,  43,  75, 185] ,
 	[209, 202, 195,  33] , [269, 272, 304, 303] , [214, 148, 178, 216] , [235,  94, 138, 228] , [ 67, 108, 109,  70] ,
 	[  7, 352, 418, 169] , [193, 188, 148, 214] , [ 97,  63,  77,  78] , [125,  47,  71, 157] , [317,  16,  17, 316] ,
-	[115, 129, 122,  48] , [148, 124, 138, 178] , [252, 285, 333, 334, 299, 302] , [181,  86,  87, 180] , [290, 393, 291, 306] ,
 	[180,  87,  88, 179] , [106,  64,  54,  53] , [119, 118, 124,  51] , [146, 145,  25,  24] , [325, 319, 320, 326] ,
 	[123, 189, 175, 197] , [293, 309, 325, 326] , [150, 171, 170, 151] , [178, 138,  94, 133] , [328, 295, 456, 461] ,
 	[361, 421, 457, 364] , [336, 274, 376, 322] , [396, 395, 431, 432] , [ 13,  39,  83,  14] , [278, 330, 350, 351] ,
@@ -100,7 +98,9 @@ QUADS = [
 	[249, 196,   6, 282] , [216, 178, 133,  59] , [286, 296, 297, 337] , [382, 383, 342, 257] , [287, 259, 443, 442] ,
 	[211, 170, 171, 212] , [306, 461, 456, 290] , [104, 105,  70,  68] , [271, 305, 409, 410] , [460, 310, 439, 458] ,
 	[214, 216, 139, 193] , [317, 316, 405, 404] , [181,  91,  92, 182] , [  1, 165, 168,  38] , [363, 464, 342, 383] ,
-	[210, 130, 103,  50] , [305, 273, 408, 409] , [311, 416, 408, 273] , [309, 293, 408, 416] , [184,  63,  79, 192] 
+	[210, 130, 103,  50] , [305, 273, 408, 409] , [311, 416, 408, 273] , [309, 293, 408, 416] , [184,  63,  79, 192] ,
+	[115, 129, 122,  48] , [148, 124, 138, 178] , [181,  86,  87, 180] , [290, 393, 291, 306] , [252, 285, 299, 302] ,
+    [285, 333, 334, 299]
 ]
 
 class face_image_to_face_mesh:
@@ -110,9 +110,22 @@ class face_image_to_face_mesh:
             gr.Markdown(
             """
             # Face Image to Face Quad Mesh
-            Uses MediaPipe to detect a face in an image and convert it to a (mostly) quad mesh.
+            Uses MediaPipe to detect a face in an image and convert it to a quad mesh.
             Currently saves to OBJ, hopefully glb at some point with color data.
             The 3d viewer has Y pointing the opposite direction from Blender, so ya hafta spin it.
+
+            The initial workflow I was imagining was:
+
+            1. sculpt high poly mesh in blender
+            2. snapshot the face
+            3. generate the mesh using the mediapipe stuff
+            4. import the low poly mediapipe face
+            5. snap the mesh to the high poly model
+            6. model the rest of the low poly model
+            7. bake the normal / etc maps to the low poly face model
+            8. it's just that easy 😛
+
+            Ideally it would be a plugin...
             """)
 
             with gr.Row():
