@@ -51,6 +51,8 @@ class face_image_to_face_mesh:
                 Saves to OBJ since gltf does not support quad faces. The 3d viewer has Y pointing the opposite direction from Blender, so ya hafta spin it.
 
                 The face depth with Zoe can be a bit much and without it is a bit generic. In blender you can fix this just by snapping to the high poly model.
+
+                Highly recommend and running it locally. The 3D model has texture info but is bugged atm in the gradios viewer (wip)
             """)
 
             with gr.Row():
@@ -186,7 +188,7 @@ class face_image_to_face_mesh:
         quadIndex = 0
         for quad in QUADS:
             quadIndex = 1 + quadIndex
-            if True:
+            if not True:
                 # is this is breaking babylonjs and hence gradio's 3D component?
                 lines.append( "f " + " ".join([f'{vertex}/{vertex}/{quadIndex}' for vertex in quad]) )
             else:
