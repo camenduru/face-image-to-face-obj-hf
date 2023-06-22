@@ -24,7 +24,7 @@ _meshin_around_main() {
 		echo "${mtl} already exists"
 	else
 		echo "creating ${mtl} for ${mash}"
-		echo -e "newmtl MyMaterial\nillum 2\nmap_Kd ${png}" > ${mtl} || exit ${?}
+		echo -e "newmtl MyMaterial\nmap_Kd ${png}" > ${mtl} || exit ${?}
 	fi
 
 	if [ -f "${png}" ] ; then
