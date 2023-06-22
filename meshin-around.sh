@@ -17,7 +17,7 @@ _meshin_around_main() {
 		echo "${mash} already exists"
 	else
 		echo "creating ${mash} for ${mesh}"
-		sed "s,^f.*,,;s,#f,f,;s,file=.*,${mtl}," ${mesh} > ${mash} || exit ${?}
+		sed "s,^f.*,,;s,#f,f,;s,.*mtllib.*,mtllib ${mtl}," ${mesh} > ${mash} || exit ${?}
 	fi
 
 	if [ -f "${mtl}" ] ; then 

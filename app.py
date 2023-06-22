@@ -52,7 +52,7 @@ class face_image_to_face_mesh:
 
                 The face depth with Zoe can be a bit much and without it is a bit generic. In blender you can fix this just by snapping to the high poly model.
 
-                Highly recommend and running it locally. The 3D model has uv values in the faces, but you will have to make the mlt file manually at this point."
+                Highly recommend running it locally. The 3D model has uv values in the faces, but you will have to make the mlt file manually at this point."
 
                 Quick import result in examples/converted/movie-gallery.mp4 under files
             """)
@@ -204,9 +204,15 @@ class face_image_to_face_mesh:
     def toObj( self, image: np.ndarray, width:int, height:int, ratio: float, landmark_list: landmark_pb2.NormalizedLandmarkList, depth: np.ndarray, zoe_scale: float):
         print( f'you have such pretty hair', self.temp_dir )
 
-        obj_file = tempfile.NamedTemporaryFile(suffix='.obj', dir=self.temp_dir, delete=False)
-        mtl_file = tempfile.NamedTemporaryFile(suffix='.mtl', dir=self.temp_dir, delete=False)
-        png_file = tempfile.NamedTemporaryFile(suffix='.png', dir=self.temp_dir, delete=False)
+        hf_hack = True
+        if hf_hack:
+            obj_file = tempfile.NamedTemporaryFile(suffix='.obj', delete=False)
+            mtl_file = tempfile.NamedTemporaryFile(suffix='.mtl', delete=False)
+            png_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+        else:
+            obj_file = tempfile.NamedTemporaryFile(suffix='.obj', dir=self.temp_dir, delete=False)
+            mtl_file = tempfile.NamedTemporaryFile(suffix='.mtl', dir=self.temp_dir, delete=False)
+            png_file = tempfile.NamedTemporaryFile(suffix='.png', dir=self.temp_dir, delete=False)
 
         ############################################
         (points,coordinates,colors) = self.landmarksToPoints( image, width, height, ratio, landmark_list, depth, zoe_scale )
@@ -216,8 +222,12 @@ class face_image_to_face_mesh:
 
         lines.append( f'o MyMesh' )
 
-        # the 'file=' is a gradio hack
-        lines.append( f'mtllib file={mtl_file.name}' )
+        if hf_hack:
+            # the 'file=' is a gradio hack
+            lines.append( f'#mtllib file={mtl_file.name}' )
+        else:
+            # the 'file=' is a gradio hack
+            lines.append( f'mtllib file={mtl_file.name}' )
 
         for index, point in enumerate(points):
             color = colors[index]
@@ -256,7 +266,6 @@ class face_image_to_face_mesh:
 
         lines = []
         lines.append( 'newmtl MyMaterial' )
-        lines.append( 'illum 2' )
         lines.append( f'map_Kd file={png_file.name}' ) # the 'file=' is a gradio hack
 
         out = open( mtl_file.name, 'w' )
