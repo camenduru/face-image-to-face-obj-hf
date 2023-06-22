@@ -86,3 +86,43 @@ def colorize(value, vmin=None, vmax=None, cmap='magma_r', invalid_val=-99, inval
         img = img.astype(np.uint8)
     return img
 
+
+import os
+
+# bard...
+def find_most_recently_created_directory(temp_dir):
+  """Finds the most recently created directory in a directory.
+
+  Args:
+    temp_dir: The directory to search.
+
+  Returns:
+    The path to the most recently created directory.
+  """
+
+  directories = os.listdir(temp_dir)
+  most_recently_created_directory = None
+  for directory in directories:
+    path = os.path.join(temp_dir, directory)
+    st = os.stat(path)
+    if most_recently_created_directory is None or st.mtime > most_recently_created_directory.mtime:
+      most_recently_created_directory = path
+
+  if most_recently_created_directory is None:
+    most_recently_created_directory = temp_dir
+
+  return most_recently_created_directory
+
+
+#chatgpt
+def get_most_recent_subdirectory(path):
+    if not os.path.isdir(path):
+        return path
+
+    subdirectories = [f for f in os.listdir(path) if os.path.isdir(os.path.join(path, f))]
+    if not subdirectories:
+        return path
+
+    most_recent_subdirectory = max(subdirectories, key=lambda d: os.path.getctime(os.path.join(path, d)))
+    return os.path.join(path, most_recent_subdirectory)
+

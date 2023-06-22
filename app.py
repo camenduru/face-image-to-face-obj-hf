@@ -7,7 +7,6 @@ import matplotlib.cm
 import mediapipe as mp
 import numpy as np
 import os
-import shutil
 import struct
 import tempfile
 import torch
@@ -17,21 +16,22 @@ from mediapipe.python.solutions.drawing_utils import _normalized_to_pixel_coordi
 from PIL import Image
 from quads import QUADS
 from typing import List, Mapping, Optional, Tuple, Union
-from utils import colorize
+from utils import colorize, get_most_recent_subdirectory
 
 class face_image_to_face_mesh:
     def __init__(self):
         self.zoe_me = True
+        self.uvwrap = not True
         self.css = ("""
-            #img-display-container {
-                max-height: 50vh;
-                }
-            #img-display-input {
-                max-height: 40vh;
+            #mesh-display-output {
+                max-height: 44vh;
+                max-width:  44vh;
+                width:auto;
+                height:auto
                 }
             #img-display-output {
-                max-height: 55vh;
-                max-width:  55vh;
+                max-height: 28vh;
+                max-width:  28vh;
                 width:auto;
                 height:auto
                 }
@@ -42,25 +42,29 @@ class face_image_to_face_mesh:
             DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
             self.zoe = torch.hub.load('isl-org/ZoeDepth', "ZoeD_N", pretrained=True).to(DEVICE).eval()
 
-        demo = gr.Blocks(css=self.css)
+        demo = gr.Blocks(css=self.css, cache_examples=True)
         with demo:
             gr.Markdown("""
                 # Face Image to Face Quad Mesh
 
                 Uses MediaPipe to detect a face in an image and convert it to a quad mesh.
-                Saves to OBJ since gltf does not support quad faces. The 3d viewer has Y pointing the opposite direction from Blender, so ya hafta spin it.
+                Saves to OBJ since gltf does not support quad faces.  The 3d viewer has Y pointing the opposite direction from Blender, so ya hafta spin it.
 
                 The face depth with Zoe can be a bit much and without it is a bit generic. In blender you can fix this just by snapping to the high poly model.
 
-                Highly recommend and running it locally. The 3D model has texture info but is bugged atm in the gradios viewer (wip)
+                Highly recommend and running it locally. The 3D model has uv values in the faces, but you will have to make the mlt file manually at this point."
+
+                Quick import result in examples/converted/movie-gallery.mp4 under files
             """)
 
             with gr.Row():
                 with gr.Column():
                     upload_image = gr.Image(label="Input image", type="numpy", source="upload")
+                    self.temp_dir = get_most_recent_subdirectory( upload_image.DEFAULT_TEMP_DIR )
+                    print( f'The temp_dir is {self.temp_dir}' )
 
                     gr.Examples( examples=[
-                        'examples/blonde-00019-1421846474.png',
+                        'examples/blonde-00081-399357008.png',
                         'examples/dude-00110-1227390728.png',
                         'examples/granny-00056-1867315302.png',
                         'examples/tuffie-00039-499759385.png',
@@ -82,7 +86,35 @@ class face_image_to_face_mesh:
                     with gr.Group():
                         gr.Markdown(
                         """
-                        The initial workflow I was imagining was:
+                        # Using the Textured Mesh in Blender
+
+                        There a couple of annoying steps atm after you download the obj from the 3d viewer. 
+
+                        You can use the script meshin-around.sh in the files section to do the conversion or manually:
+                        
+                        1. edit the file and change the mtllib line to use fun.mtl
+                        2. replace / delete all lines that start with 'f', eg :%s,^f.*,,
+                        3. uncomment all the lines that start with '#f', eg: :%s,^#f,f,
+                        4. save and exit
+                        5. create fun.mtl to point to the texture like:
+
+                        ```
+                        newmtl MyMaterial
+                        map_Kd fun.png
+                        ```
+
+                        Make sure the obj, mtl and png are all in the same directory
+
+                        Now the import will have the texture data: File -> Import -> Wavefront (obj) -> fun.obj
+
+                        This is all a work around for a weird hf+gradios+babylonjs bug which seems to be related to the version
+                        of babylonjs being used... It works fine in a local babylonjs sandbox...
+
+                        # Suggested Workflows
+
+                        Here are some workflow ideas.
+
+                        ## retopologize high poly face mesh
 
                         1. sculpt high poly mesh in blender
                         2. snapshot the face
@@ -94,14 +126,24 @@ class face_image_to_face_mesh:
                         8. it's just that easy 😛
 
                         Ideally it would be a plugin...
+
+                        ## stable diffusion integration
+
+                        1. generate a face in sd
+                        2. generate the mesh
+                        3. repose it and use it for further generation
+
+                        May need to expanded the generated mesh to cover more, maybe with
+                        <a href="https://github.com/shunsukesaito/PIFu" target="_blank">PIFu model</a>.
+
                         """)
 
                 with gr.Column():
                     with gr.Group():
-                        num_faces_detected = gr.Number(label="Number of faces detected", value=0)
+                        output_mesh = gr.Model3D(clear_color=3*[0],  label="3D Model",elem_id='mesh-display-output')
                         output_image = gr.Image(label="Output image",elem_id='img-display-output')
-                        output_mesh = gr.Model3D(clear_color=[0.0, 0.0, 0.0, 0.0],  label="3D Model",elem_id='img-display-output')
                         depth_image = gr.Image(label="Depth image",elem_id='img-display-output')
+                        num_faces_detected = gr.Number(label="Number of faces detected", value=0)
 
             upload_image_btn.click(
                 fn=self.detect, 
@@ -120,11 +162,10 @@ class face_image_to_face_mesh:
         mp_drawing_styles = mp.solutions.drawing_styles
         mp_face_mesh = mp.solutions.face_mesh
             
-        mesh = "examples/jackiechan.obj"
+        mesh = "examples/converted/in-granny.obj"
 
         if self.zoe_me and use_zoe:
             depth = self.zoe.infer_pil(image)
-            print( f'type of depth is {type(depth)}' )
             idepth = colorize(depth, cmap='gray_r')
         else:
             depth = None
@@ -141,7 +182,7 @@ class face_image_to_face_mesh:
 
             annotated_image = image.copy()
             for face_landmarks in results.multi_face_landmarks:
-                mesh = self.toObj(image=image, width=width, height=height, ratio=ratio, landmark_list=face_landmarks, depth=depth, zoe_scale=zoe_scale)
+                (mesh,mtl,png) = self.toObj(image=image, width=width, height=height, ratio=ratio, landmark_list=face_landmarks, depth=depth, zoe_scale=zoe_scale)
 
                 mp_drawing.draw_landmarks(
                     image=annotated_image,
@@ -161,25 +202,35 @@ class face_image_to_face_mesh:
             return mesh, annotated_image, idepth, 1
 
     def toObj( self, image: np.ndarray, width:int, height:int, ratio: float, landmark_list: landmark_pb2.NormalizedLandmarkList, depth: np.ndarray, zoe_scale: float):
-        print( f'you have such pretty hair' )
+        print( f'you have such pretty hair', self.temp_dir )
 
-        obj_file = tempfile.NamedTemporaryFile(suffix='.obj', delete=False)
-        mtl_file = tempfile.NamedTemporaryFile(suffix='.mtl', delete=False)
-        png_file = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+        obj_file = tempfile.NamedTemporaryFile(suffix='.obj', dir=self.temp_dir, delete=False)
+        mtl_file = tempfile.NamedTemporaryFile(suffix='.mtl', dir=self.temp_dir, delete=False)
+        png_file = tempfile.NamedTemporaryFile(suffix='.png', dir=self.temp_dir, delete=False)
 
+        ############################################
+        (points,coordinates,colors) = self.landmarksToPoints( image, width, height, ratio, landmark_list, depth, zoe_scale )
         ############################################
 
         lines = []
-        lines.append( f'mtllib {os.path.basename(mtl_file.name)}' )
 
-        (points,coordinates) = self.landmarksToPoints( width, height, ratio, landmark_list, depth, zoe_scale )
-        for point in points:
-            lines.append( "v " + " ".join([str(value) for value in point]) )
+        lines.append( f'o MyMesh' )
+
+        # the 'file=' is a gradio hack
+        lines.append( f'mtllib file={mtl_file.name}' )
+
+        for index, point in enumerate(points):
+            color = colors[index]
+            scaled_color = [value / 255 for value in color]  # Scale colors down to 0-1 range
+            flipped = [-value for value in point]
+            flipped[ 0 ] = -flipped[ 0 ]
+            lines.append( "v " + " ".join(map(str, flipped + color)) )
 
         for coordinate in coordinates:
             lines.append( "vt " + " ".join([str(value) for value in coordinate]) )
 
         for quad in QUADS:
+            #quad = list(reversed(quad))
             normal = self.totallyNormal( points[ quad[ 0 ] -1 ], points[ quad[ 1 ] -1 ], points[ quad[ 2 ] -1 ] )
             lines.append( "vn " + " ".join([str(value) for value in normal]) )
 
@@ -188,59 +239,63 @@ class face_image_to_face_mesh:
         quadIndex = 0
         for quad in QUADS:
             quadIndex = 1 + quadIndex
-            if not True:
-                # is this is breaking babylonjs and hence gradio's 3D component?
-                lines.append( "f " + " ".join([f'{vertex}/{vertex}/{quadIndex}' for vertex in quad]) )
+            face_uv = "f " + " ".join([f'{vertex}/{vertex}/{quadIndex}' for vertex in quad])
+            face_un = "f " + " ".join([str(vertex) for vertex in quad])
+            if self.uvwrap:
+                lines.append( face_uv )
             else:
-                lines.append( "f " + " ".join([str(vertex) for vertex in quad]) )
-
+                lines.append( f'#{face_uv}' )
+                lines.append( f'{face_un}' )
+                #"f " + " ".join([str(vertex) for vertex in quad]) )
 
         out = open( obj_file.name, 'w' )
         out.write( '\n'.join( lines ) + '\n' )
         out.close()
-        shutil.copy(obj_file.name, "/tmp/lol.obj")
 
         ############################################
 
         lines = []
         lines.append( 'newmtl MyMaterial' )
-        lines.append( f'Ka 1.000 1.000 1.000     # white' )
-        lines.append( f'Kd 1.000 1.000 1.000     # white' )
-        lines.append( f'Ks 0.000 0.000 0.000     # black (off)' )
-        lines.append( f'map_Ka {os.path.basename(png_file.name)}' )
-        lines.append( f'map_Kd {os.path.basename(png_file.name)}' )
+        lines.append( 'illum 2' )
+        lines.append( f'map_Kd file={png_file.name}' ) # the 'file=' is a gradio hack
 
         out = open( mtl_file.name, 'w' )
         out.write( '\n'.join( lines ) + '\n' )
         out.close()
-        shutil.copy(mtl_file.name, "/tmp/lol.mtl")
 
         ############################################
 
         cv2.imwrite(png_file.name, cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        shutil.copy(png_file.name, "/tmp/lol.png")
 
         ############################################
 
         print( f'I know it is special to you so I saved it to {obj_file.name} since we are friends' )
-        return obj_file.name
+        return (obj_file.name,mtl_file.name,png_file.name)
 
-    def landmarksToPoints( self, width: int, height: int, ratio: float, landmark_list: landmark_pb2.NormalizedLandmarkList, depth: np.ndarray, zoe_scale: float ):
+    def landmarksToPoints( self, image:np.ndarray, width: int, height: int, ratio: float, landmark_list: landmark_pb2.NormalizedLandmarkList, depth: np.ndarray, zoe_scale: float ):
         points      = [] # 3d vertices
         coordinates = [] # 2d texture coordinates
+        colors      = [] # 3d rgb info
+
         mins = [+np.inf] * 3
         maxs = [-np.inf] * 3
+
         for idx, landmark in enumerate(landmark_list.landmark):
             if ((landmark.HasField('visibility') and
                 landmark.visibility < _VISIBILITY_THRESHOLD) or
                 (landmark.HasField('presence') and
                 landmark.presence < _PRESENCE_THRESHOLD)):
                     idk_what_to_do_for_this = True
+
             x, y = _normalized_to_pixel_coordinates(landmark.x,landmark.y,width,height)
+            color = image[y,x]
+            colors.append( [value / 255 for value in color ] )
             coordinates.append( [x/width,1-y/height] )
+
             if depth is not None:
                 landmark.z = depth[y, x] * zoe_scale
-            point = [landmark.x * ratio, -landmark.y, -landmark.z];
+            #point = [landmark.x * ratio, -landmark.y, -landmark.z];
+            point = [landmark.x * ratio, landmark.y, landmark.z];
             for pidx,value in enumerate( point ):
                 mins[pidx] = min(mins[pidx],value)
                 maxs[pidx] = max(maxs[pidx],value)
@@ -253,7 +308,7 @@ class face_image_to_face_mesh:
         print( f'mins: {mins}' )
         print( f'mids: {mids}' )
         print( f'maxs: {maxs}' )
-        return (points,coordinates)
+        return (points,coordinates,colors)
 
     def totallyNormal(self, p0, p1, p2):
         v1 = np.array(p1) - np.array(p0)
